@@ -1,13 +1,3 @@
-## Как выглядит LumaDesk
-
-### Тёмная тема
-
-![LumaDesk — тёмная тема](LumaDesk-Dark-Preview.png)
-
-### Светлая тема
-
-![LumaDesk — светлая тема](LumaDesk-Light-Preview.png)
-
 # LumaDesk
 
 ## Возможности
@@ -63,6 +53,17 @@ sudo bash install-ubuntu22-ip.sh YOUR_SERVER_IP
 
 Без аккаунта заметки, события и настройки сохраняются локально.
 Положения виджетов и тема оформления остаются отдельными для каждого ПК.
+
+## Как выглядит LumaDesk
+
+### Тёмная тема
+
+![LumaDesk — тёмная тема](LumaDesk-Dark-Preview.png)
+
+### Светлая тема
+
+![LumaDesk — светлая тема](LumaDesk-Light-Preview.png)
+
 
 ## Версия 2.4
 
