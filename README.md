@@ -1,6 +1,14 @@
-# LumaDesk
+## Как выглядит LumaDesk
 
-Лёгкие полупрозрачные виджеты для рабочего стола Windows 10 и 11.
+### Тёмная тема
+
+![LumaDesk — тёмная тема](LumaDesk-Dark-Preview.png)
+
+### Светлая тема
+
+![LumaDesk — светлая тема](LumaDesk-Light-Preview.png)
+
+# LumaDesk
 
 ## Возможности
 
