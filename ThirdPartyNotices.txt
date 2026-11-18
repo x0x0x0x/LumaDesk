@@ -1,0 +1,27 @@
+LumaDesk — third-party data notices
+
+MET Norway forecast data
+Source: https://api.met.no/weatherapi/locationforecast/2.0/
+Provider: Norwegian Meteorological Institute (MET Norway).
+License: Creative Commons Attribution 4.0 International
+https://creativecommons.org/licenses/by/4.0/
+Changes: local-date aggregation, sampled daily min/max, symbol-code mapping,
+Russian labels. Current conditions are model estimates at the nearest forecast time.
+Weather icons are drawn by LumaDesk; no Yr logo or proprietary icons are bundled.
+
+Open-Meteo forecast data (fallback)
+Source: https://open-meteo.com/
+License: CC BY 4.0 https://creativecommons.org/licenses/by/4.0/
+Free API is used for personal non-commercial operation.
+
+Russian city catalogue
+Source: hflabs/city, https://github.com/hflabs/city
+Original coordinate/address data: DaData.ru, https://dadata.ru/
+License: Creative Commons Attribution-ShareAlike 4.0 International
+https://creativecommons.org/licenses/by-sa/4.0/
+Derived files Source/Cities.tsv and Source/Cities.tsv.gz retain that licence.
+Changes: retained city/region/latitude/longitude/UTC-offset fields; converted
+CSV to UTF-8 TSV and compressed as an embedded resource. Other fields omitted.
+The data licence applies to this city dataset; it is separate from application code.
+Catalogue downloaded 2026-11-17; later administrative/name/timezone changes may
+require updating the dataset.

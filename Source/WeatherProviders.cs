@@ -1,0 +1,49 @@
+﻿using System;
+using System.IO;
+using System.IO.Compression;
+using System.Net;
+using System.Text;
+using System.Linq;
+using System.Globalization;
+using System.Collections.Generic;
+using System.Reflection;
+using System.Web.Script.Serialization;
+namespace LumaDesk {
+public static class RussianCities {
+ static List<City> cities;
+ public static List<City> All {get{if(cities==null){var list=new List<City>();using(var resource=Assembly.GetExecutingAssembly().GetManifestResourceStream("LumaDesk.Cities"))using(var gzip=new GZipStream(resource,CompressionMode.Decompress))using(var reader=new StreamReader(gzip,Encoding.UTF8)){string row;while((row=reader.ReadLine())!=null){var p=row.Split(new char[]{'\t'},StringSplitOptions.None);if(p.Length==5)list.Add(new City{name=p[0],admin1=p[1],latitude=double.Parse(p[2],CultureInfo.InvariantCulture),longitude=double.Parse(p[3],CultureInfo.InvariantCulture),utc_offset=int.Parse(p[4],CultureInfo.InvariantCulture),country_code="RU"});}}cities=list;}return cities;}}
+ static string Norm(string s){return (s??"").ToLowerInvariant().Replace('ё','е');}
+ public static List<City> Search(string query){string q=Norm(query.Trim());var tokens=q.Split(new[]{' ',','},StringSplitOptions.RemoveEmptyEntries);return All.Where(c=>tokens.All(t=>Norm(c.name+" "+c.admin1).Contains(t))).OrderBy(c=>Norm(c.name)==q?0:Norm(c.name).StartsWith(q)?1:2).ThenBy(c=>c.name,StringComparer.Create(new CultureInfo("ru-RU"),true)).Take(80).ToList();}
+ public static int Offset(double lat,double lon){double cos=Math.Cos(lat*Math.PI/180);return All.OrderBy(c=>(c.latitude-lat)*(c.latitude-lat)+(c.longitude-lon)*(c.longitude-lon)*cos*cos).First().utc_offset;}
+}
+public class MetRoot {public MetProperties properties;}
+public class MetProperties {public MetMeta meta;public MetPoint[] timeseries;}
+public class MetMeta {public string updated_at;}
+public class MetPoint {public string time;public MetPointData data;}
+public class MetPointData {public MetInstant instant;public MetPeriod next_1_hours,next_6_hours,next_12_hours;}
+public class MetInstant {public MetValues details;}
+public class MetValues {public double air_temperature,wind_speed,relative_humidity,cloud_area_fraction;}
+public class MetPeriod {public MetSummary summary;}
+public class MetSummary {public string symbol_code;}
+public class MetCache {public string Body,ExpiresUtc,Modified;}
+public static class WeatherHttp {
+ static JavaScriptSerializer json=new JavaScriptSerializer{MaxJsonLength=3000000};
+ public static string Met(string url,string cacheName){Directory.CreateDirectory(Store.Dir);string path=Path.Combine(Store.Dir,cacheName);MetCache saved=null;try{saved=json.Deserialize<MetCache>(File.ReadAllText(path));DateTime until;if(saved!=null&&DateTime.TryParse(saved.ExpiresUtc,CultureInfo.InvariantCulture,DateTimeStyles.RoundtripKind,out until)&&until.ToUniversalTime()>DateTime.UtcNow&&!string.IsNullOrEmpty(saved.Body))return saved.Body;}catch{}
+ ServicePointManager.SecurityProtocol=SecurityProtocolType.Tls12;var req=(HttpWebRequest)WebRequest.Create(url);req.UserAgent="LumaDesk/2.1 (Windows personal desktop weather widget)";req.Timeout=10000;req.ReadWriteTimeout=10000;req.AutomaticDecompression=DecompressionMethods.GZip|DecompressionMethods.Deflate;
+ if(saved!=null&&!string.IsNullOrEmpty(saved.Modified)){DateTime modified;if(DateTime.TryParse(saved.Modified,CultureInfo.InvariantCulture,DateTimeStyles.AdjustToUniversal,out modified))req.IfModifiedSince=modified;}
+ try{using(var response=(HttpWebResponse)req.GetResponse())using(var reader=new StreamReader(response.GetResponseStream(),Encoding.UTF8)){string body=reader.ReadToEnd();var parsed=json.Deserialize<MetRoot>(body);if(parsed==null||parsed.properties==null||parsed.properties.timeseries==null||parsed.properties.timeseries.Length<10)throw new InvalidDataException("Некорректный ответ MET Norway");saved=new MetCache{Body=body,ExpiresUtc=Expires(response),Modified=response.Headers["Last-Modified"]};Save(path,saved);return body;}}
+ catch(WebException error){var response=error.Response as HttpWebResponse;if(response!=null){using(response){if(response.StatusCode==HttpStatusCode.NotModified&&saved!=null){saved.ExpiresUtc=Expires(response);Save(path,saved);return saved.Body;}}}throw;}}
+ static string Expires(HttpWebResponse response){DateTime expires=DateTime.UtcNow.AddHours(3),server;if(DateTime.TryParse(response.Headers["Expires"],CultureInfo.InvariantCulture,DateTimeStyles.AdjustToUniversal,out server)&&server.ToUniversalTime()>expires)expires=server.ToUniversalTime();return expires.ToString("o",CultureInfo.InvariantCulture);}
+ static void Save(string path,MetCache cache){try{File.WriteAllText(path,json.Serialize(cache),Encoding.UTF8);}catch{}}
+}
+public static class WeatherProviders {
+ public static WeatherData Select(int mode,Func<WeatherData> met,Func<WeatherData> open){if(mode==1)return met();if(mode==2)return open();try{return met();}catch{return open();}}
+ public static WeatherData Fetch(double lat,double lon,int mode){return Select(mode,()=>{string a=lat.ToString("F4",CultureInfo.InvariantCulture),b=lon.ToString("F4",CultureInfo.InvariantCulture);string raw=WeatherHttp.Met("https://api.met.no/weatherapi/locationforecast/2.0/compact?lat="+a+"&lon="+b,"met-"+a+"-"+b+".json");return ParseMet(raw,RussianCities.Offset(lat,lon),DateTime.UtcNow);},()=>{string url="https://api.open-meteo.com/v1/forecast?latitude="+lat.ToString(CultureInfo.InvariantCulture)+"&longitude="+lon.ToString(CultureInfo.InvariantCulture)+"&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m&daily=weather_code,temperature_2m_max,temperature_2m_min&timezone=auto&forecast_days=8&wind_speed_unit=ms";var json=new JavaScriptSerializer();var data=json.Deserialize<WeatherData>(Net.Get(url));Validate(data);data.Provider="Open-Meteo";return data;});}
+ static int Cloud(double c){return c<12?0:c<38?1:c<80?2:3;}
+ public static int Code(string symbol,double cloud){string s=(symbol??"").ToLowerInvariant();if(s.Contains("thunder"))return 95;if(s.Contains("sleet"))return 69;if(s.Contains("snow"))return s.Contains("heavy")?75:s.Contains("light")?71:73;if(s.Contains("rain"))return s.Contains("heavy")?65:s.Contains("light")?61:63;if(s.Contains("fog"))return 45;if(s.Contains("partlycloudy"))return 2;if(s.Contains("cloudy"))return 3;if(s.Contains("fair"))return 1;if(s.Contains("clearsky"))return 0;return Cloud(cloud);}
+ static string Symbol(MetPoint p){var d=p.data;var period=d.next_1_hours??d.next_6_hours??d.next_12_hours;return period!=null&&period.summary!=null?period.summary.symbol_code:null;}
+ public static WeatherData ParseMet(string raw,int offset,DateTime nowUtc){var json=new JavaScriptSerializer{MaxJsonLength=3000000};var root=json.Deserialize<MetRoot>(raw);if(root==null||root.properties==null||root.properties.timeseries==null)throw new InvalidDataException("Нет прогноза MET Norway");var series=root.properties.timeseries.Where(p=>p.data!=null&&p.data.instant!=null&&p.data.instant.details!=null).Select(p=>new {Point=p,Utc=DateTime.Parse(p.time,CultureInfo.InvariantCulture,DateTimeStyles.AdjustToUniversal|DateTimeStyles.AssumeUniversal)}).OrderBy(p=>p.Utc).ToArray();if(series.Length==0)throw new InvalidDataException("Пустой прогноз");nowUtc=DateTime.SpecifyKind(nowUtc,DateTimeKind.Utc);var nearest=series.OrderBy(p=>Math.Abs((p.Utc-nowUtc).TotalSeconds)).First();if(Math.Abs((nearest.Utc-nowUtc).TotalHours)>6)throw new InvalidDataException("Устаревший прогноз");var details=nearest.Point.data.instant.details;var local=nowUtc.AddHours(offset);var groups=series.GroupBy(p=>p.Utc.AddHours(offset).Date).ToDictionary(p=>p.Key,p=>p.ToArray());var times=new List<string>();var highs=new List<double>();var lows=new List<double>();var codes=new List<int>();for(int day=0;day<8;day++){var date=local.Date.AddDays(day);if(!groups.ContainsKey(date))throw new InvalidDataException("Нет семи дней прогноза");var points=groups[date];if(day>0&&points.Length<3)throw new InvalidDataException("Неполный дневной прогноз");times.Add(date.ToString("yyyy-MM-dd",CultureInfo.InvariantCulture));highs.Add(points.Max(p=>p.Point.data.instant.details.air_temperature));lows.Add(points.Min(p=>p.Point.data.instant.details.air_temperature));var noon=points.OrderBy(p=>Math.Abs((p.Utc.AddHours(offset)-date.AddHours(12)).TotalHours)).First();codes.Add(Code(Symbol(noon.Point),noon.Point.data.instant.details.cloud_area_fraction));}
+ var result=new WeatherData{Provider="MET Norway",timezone="UTC"+(offset>=0?"+":"")+offset,current=new Current{temperature_2m=details.air_temperature,apparent_temperature=details.air_temperature,wind_speed_10m=details.wind_speed,relative_humidity_2m=details.relative_humidity,weather_code=Code(Symbol(nearest.Point),details.cloud_area_fraction),time=local.ToString("yyyy-MM-ddTHH:mm",CultureInfo.InvariantCulture)},daily=new Daily{time=times.ToArray(),temperature_2m_max=highs.ToArray(),temperature_2m_min=lows.ToArray(),weather_code=codes.ToArray()}};Validate(result);return result;}
+ public static void Validate(WeatherData data){if(data==null||data.current==null||data.daily==null||data.daily.time==null||data.daily.time.Length<8||data.daily.temperature_2m_max==null||data.daily.temperature_2m_min==null||data.daily.weather_code==null||data.daily.temperature_2m_max.Length!=data.daily.time.Length||data.daily.temperature_2m_min.Length!=data.daily.time.Length||data.daily.weather_code.Length!=data.daily.time.Length)throw new InvalidDataException("Неполный ответ погоды");for(int i=0;i<data.daily.time.Length;i++)if(data.daily.temperature_2m_max[i]<data.daily.temperature_2m_min[i]||double.IsNaN(data.daily.temperature_2m_max[i])||double.IsNaN(data.daily.temperature_2m_min[i]))throw new InvalidDataException("Некорректная температура");}
+}
+}

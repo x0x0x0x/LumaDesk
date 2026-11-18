@@ -1,0 +1,32 @@
+services:
+  api:
+    build: .
+    restart: unless-stopped
+    environment:
+      LUMADESK_REGISTRATION: ${LUMADESK_REGISTRATION:-true}
+      LUMADESK_MAX_USERS: ${LUMADESK_MAX_USERS:-1000}
+    volumes:
+      - app_data:/data
+    networks: [private]
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+  caddy:
+    image: caddy:2.11.9-alpine
+    restart: unless-stopped
+    environment:
+      SERVER_IP: ${SERVER_IP:?Set the actual public IPv4 address in .env.ip}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile.ip:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks: [private]
+    depends_on: [api]
+networks:
+  private:
+volumes:
+  app_data:
+  caddy_data:
+  caddy_config:
