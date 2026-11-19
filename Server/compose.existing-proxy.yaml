@@ -1,0 +1,15 @@
+services:
+  api:
+    build: .
+    restart: unless-stopped
+    environment:
+      LUMADESK_REGISTRATION: ${LUMADESK_REGISTRATION:-true}
+      LUMADESK_MAX_USERS: ${LUMADESK_MAX_USERS:-1000}
+    ports:
+      - "127.0.0.1:8765:8000"
+    volumes:
+      - app_data:/data
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+volumes:
+  app_data:

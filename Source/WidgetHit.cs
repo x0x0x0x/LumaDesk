@@ -1,0 +1,23 @@
+using System;
+using System.Drawing;
+using System.Linq;
+namespace LumaDesk {
+public enum WidgetAction {None,Alarms,WorldCity,PreviousMonth,NextMonth,Date,Reminder,Reminders,WeatherCity,WeatherRefresh,AddNote,Note,Task}
+public class WidgetHit {
+ public WidgetAction Action;public Rectangle Bounds;public string Id="";public int Index;public DateTime Day;
+ public string Key {get{return Action==WidgetAction.None?"":Action+":"+Index+":"+Id+":"+Day.Ticks;}}
+ public static WidgetHit None {get{return new WidgetHit();}}
+}
+public static class WidgetTargets {
+ static WidgetHit Target(WidgetAction action,Rectangle bounds,int index=0,string id="",DateTime day=default(DateTime)){return new WidgetHit{Action=action,Bounds=bounds,Index=index,Id=id,Day=day};}
+ public static WidgetHit At(int kind,Point p,State s,DateTime month,DateTime now,WeatherData weather,int scroll,System.Collections.Generic.List<NoteCard> cards=null){
+  if(kind==0){for(int i=0;i<2;i++){var r=new Rectangle(i==0?18:184,165,158,41);if(r.Contains(p))return Target(WidgetAction.WorldCity,r,i);}var alarm=ClockFace.BoundsFor(now);if(alarm.Contains(p))return Target(WidgetAction.Alarms,alarm);}
+  else if(kind==1){var prev=new Rectangle(281,15,29,32);var next=new Rectangle(314,15,29,32);if(prev.Contains(p))return Target(WidgetAction.PreviousMonth,prev);if(next.Contains(p))return Target(WidgetAction.NextMonth,next);if(new Rectangle(18,88,322,204).Contains(p)){int col=(p.X-18)/46,row=(p.Y-88)/34;var first=new DateTime(month.Year,month.Month,1);var day=first.AddDays(row*7+col-((int)first.DayOfWeek+6)%7);var cell=new Rectangle(18+col*46+3,88+row*34,38,32);return cell.Contains(p)?Target(WidgetAction.Date,cell,day:day):WidgetHit.None;}var events=s.Items.Where(a=>a.Kind=="reminder"&&a.Enabled&&Host.MatchesDate(a,now.Date)).OrderBy(a=>a.Next.TimeOfDay).Take(3).ToArray();for(int i=0;i<events.Length;i++){var r=new Rectangle(18,354+i*43,324,38);if(r.Contains(p))return Target(WidgetAction.Reminder,r,i,events[i].Id);}var more=WidgetButtons.CalendarBounds(events.Length>0);if(more.Contains(p))return Target(WidgetAction.Reminders,more,day:now.Date);}
+  else if(kind==2){if(WidgetButtons.WeatherRefreshBounds.Contains(p))return Target(WidgetAction.WeatherRefresh,WidgetButtons.WeatherRefreshBounds);var city=new Rectangle(18,16,280,34);if(city.Contains(p))return Target(WidgetAction.WeatherCity,city);var refresh=weather==null?new Rectangle(18,146,324,78):Rectangle.Empty;if(refresh.Contains(p))return Target(WidgetAction.WeatherRefresh,refresh);}
+  else if(kind==3){var plus=NoteHeader.PlusBounds;if(plus.Contains(p))return Target(WidgetAction.AddNote,plus);var viewport=new Rectangle(18,NoteCards.Top,324,NoteCards.Bottom-NoteCards.Top);if(viewport.Contains(p))foreach(var card in cards??NoteCards.Layout(s,scroll)){if(!card.Bounds.Contains(p))continue;int line;if(NoteCards.TaskAt(card,p,out line)){int row=card.Lines.FindIndex(l=>l.Index==line);var r=Rectangle.Intersect(viewport,new Rectangle(card.Bounds.X+10,card.Bounds.Y+41+row*24,24,21));return Target(WidgetAction.Task,r,line,card.Note.Id);}return Target(WidgetAction.Note,Rectangle.Intersect(viewport,card.Bounds),id:card.Note.Id);}}
+  return WidgetHit.None;
+ }
+ public static void PaintHover(System.Drawing.Graphics g,WidgetHit hit,bool pressed){if(hit==null||hit.Action==WidgetAction.None||hit.Bounds.IsEmpty||hit.Bounds.Width<4||hit.Bounds.Height<4)return;var state=g.Save();g.SmoothingMode=System.Drawing.Drawing2D.SmoothingMode.AntiAlias;var r=hit.Bounds;r.Inflate(-1,-1);int radius=Math.Min(8,Math.Max(1,Math.Min(r.Width,r.Height)/2));using(var p=Theme.Round(r,radius))using(var b=new SolidBrush(Color.FromArgb(pressed?65:AppTheme.Light?29:36,DesktopArt.Accent)))g.FillPath(b,p);using(var p=Theme.Round(r,radius))using(var pen=new Pen(Color.FromArgb(pressed?210:145,DesktopArt.Accent),pressed?1.8f:1.2f))g.DrawPath(pen,p);g.Restore(state);}
+ public static string Hint(WidgetHit hit){switch(hit.Action){case WidgetAction.Alarms:return "Будильники";case WidgetAction.WorldCity:return "Выбрать город и часовой пояс";case WidgetAction.PreviousMonth:return "Предыдущий месяц";case WidgetAction.NextMonth:return "Следующий месяц";case WidgetAction.Date:return "Напоминания на "+hit.Day.ToString("dd.MM.yyyy");case WidgetAction.Reminder:return "Изменить напоминание";case WidgetAction.Reminders:return "Напоминания на сегодня";case WidgetAction.WeatherCity:return "Выбрать город погоды";case WidgetAction.WeatherRefresh:return "Обновить погоду";case WidgetAction.AddNote:return "Новая заметка";case WidgetAction.Note:return "Открыть заметку";case WidgetAction.Task:return "Отметить пункт списка";default:return "";}}
+}
+}
